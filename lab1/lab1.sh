@@ -1,16 +1,26 @@
-#!/bin/sh
+#!/bin/bash
 
 # Variables
+timeLimit=0
+timeLimitHours=0
+timeLimitDays=0
 
-latetime=0
-hours=0
-days=20
+# Declare associative array of months
+declare -A MONTHS
+MONTHS=( ["Jan"]=01 ["Feb"]=02 ["Mar"]=03 ["Apr"]=04 ["May"]=05 ["Jun"]=06 ["Jul"]=07 ["Aug"]=08 ["Sep"]=09 ["Oct"]=10 ["Nov"]=11 ["Dec"]=12)
 
-# Return the timestamp.
-getTimestamp()
-{   
-    temp=`echo $1 | cut -d "[" -f 2 | sed 's/\// /g' | sed 's/:/ /'`
-    date -d"$temp" +%s 
+# Converts one row to unix timestamp
+timestamp()
+{
+    time=$(echo $1 | awk '{print $4}')
+    day=${time:1:2}
+    month=${MONTHS[${time:4:3}]}
+    year=${time:8:4}
+    hour=${time:13:2}
+    minute=${time:16:2}
+    second=${time:19:2}
+#    echo "$day .. $month .. $year .. $hour .. $minute .. $second "
+    date --date="$year$month$day $hour:$minute:$second" +%s
 }
 
 # -c
@@ -30,15 +40,6 @@ PrintMostSuccessfulAddress()
     {
 	while read ip date code ; do
 
-	    time=`getTimestamp $date`
-	    subr=`expr $latetime - $time`
-	 
-	    a=`expr $days \* 86400`
-	    
-#	    if [ $subr -lt $a ] ; then
-#		echo "yeah!"
-#	    fi
-	    
 	    if [ $code = "200" ] ; then
 		result="$result $ip\n" 
 	    fi
@@ -49,9 +50,10 @@ PrintMostSuccessfulAddress()
     IFS=$OLDIFS
 }
 
-# Parse flags.
+
 count=1
 
+# Parse paramerters.
 while getopts "n:h:d:" flag ; do
     case $flag in
 	n)
@@ -59,14 +61,14 @@ while getopts "n:h:d:" flag ; do
 	    ;;
 	h)
 	    if [ $OPTARG -lt 24 ] ; then
-		hours = $OPTARG
+		timeLimitHours=$OPTARG
 	    else
 		echo "Hours must be less then 24."
 		exit 1
 	    fi
 	    ;;
 	d)
-	    days = $OPTARG;
+	    timeLimitDays=$OPTARG;
 	    ;;
 	*)
 	    echo "$flag" $OPTIND $OPTARG
@@ -74,28 +76,34 @@ while getopts "n:h:d:" flag ; do
     esac
 done
 
-
 # Get the filename.
-shift `expr $OPTIND - 1`
-echo $1;
+shift $(expr $OPTIND - 1)
+echo "Parsing File .. $1";
 
-# Get latest time from tail of file.
-latetime=$(getTimestamp `tail -1 < $1 | awk '{print $4}'`)
+# Check if we have time limit set.
+if [ $timeLimitDays -gt 0 -o $timeLimitHours -gt 0 ] ; then
 
-PrintMostSuccessfulAddress $count $1
+    # Fetch the last row of the file.
+    lastline=`tail -1 <$1`
 
-#while read line ; do
+    # Convert the date to timestamp.
+    timeLimit=$(timestamp "$lastline")
+
+    # Subtract the values from limit.
+    timeLimit=`expr $timeLimit - $timeLimitDays \* 24 \* 60 \* 60`
+    timeLimit=`expr $timeLimit - $timeLimitHours \* 60 \* 60`
+
+    echo $timeLimit
+
+    #Make a new subset of rows from log (THIS TAKES TIME.)
+    while read line ; do
+        rowTimeStamp=$(timestamp "$line")
+		
+	if [ $rowTimeStamp -ge $timeLimit ] ; then
+	    result+="$line\n"
+	fi
+    done < $1
     
-#    temp=`echo $line | awk '{print $4}' | cut -d "[" -f 2 | sed 's/\// /g' | sed '0,/:/{s/:/ /}'`
-#    timestamp=`
-
-#    if [ $timestamp -lt 9999999999999 ] ; then
-#	a="$a $line\n"
-###    fi
-#done < $1
-
-
-##awk '{print $4}' < $1
-
-#date --date='06/12/2012 07:21:22' +"%s"
-
+    # Print result.
+    echo -e $result
+fi
