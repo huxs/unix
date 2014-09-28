@@ -1,60 +1,30 @@
-#!/bin/bash
+#!/bin/sh
 
 # Variables
 timeLimit=0
 timeLimitHours=0
 timeLimitDays=0
+count=1
 
-# Declare associative array of months
-declare -A MONTHS
-MONTHS=( ["Jan"]=01 ["Feb"]=02 ["Mar"]=03 ["Apr"]=04 ["May"]=05 ["Jun"]=06 ["Jul"]=07 ["Aug"]=08 ["Sep"]=09 ["Oct"]=10 ["Nov"]=11 ["Dec"]=12)
+# Include scripts.
+dir=$(dirname "$0")
+. $dir/lab1_c.sh
+. $dir/lab1_2.sh
+. $dir/lab1_r.sh
+. $dir/lab1_f.sh
+. $dir/lab1_t.sh
+
 
 # Converts one row to unix timestamp
 timestamp()
 {
-    time=$(echo $1 | awk '{print $4}')
-    day=${time:1:2}
-    month=${MONTHS[${time:4:3}]}
-    year=${time:8:4}
-    hour=${time:13:2}
-    minute=${time:16:2}
-    second=${time:19:2}
-#    echo "$day .. $month .. $year .. $hour .. $minute .. $second "
-    date --date="$year$month$day $hour:$minute:$second" +%s
+    time=$(echo "$1" | awk '{print $4}')
+    temp=$(echo $time | cut -d "[" -f 2 | sed 's/\// /g' | sed 's/:/ /')
+    date -d"$temp" +%s
 }
-
-# -c
-PrintMostUsedAddress()
-{
-    awk '{print $1}' < $2 | uniq -c | sort -n -r | head -$1 | awk '{print $2,$1}'
-}
-
-# -2
-#awk '{print $1, $9}' < $1 | grep -E '{1}\ 200' | uniq -c | sort -n | tail -1 | awk '{print $2,$1}'
-PrintMostSuccessfulAddress()
-{
-    OLDIFS=$IFS
-    IFS=' '
-    content=`awk '{print $1, $4, $9}' < $2`
-    echo $content | 
-    {
-	while read ip date code ; do
-
-	    if [ $code = "200" ] ; then
-		result="$result $ip\n" 
-	    fi
-
-	done
-	echo $result | uniq -c | sort -n -r | head -$1 | awk '{print $2, $1}'
-    }
-    IFS=$OLDIFS
-}
-
-
-count=1
 
 # Parse paramerters.
-while getopts "n:h:d:" flag ; do
+while getopts "n:h:d:c2rFt" flag ; do
     case $flag in
 	n)
 	    count=$OPTARG
@@ -70,9 +40,25 @@ while getopts "n:h:d:" flag ; do
 	d)
 	    timeLimitDays=$OPTARG;
 	    ;;
+	c)
+	    query="c"
+	    ;;
+	2)
+	    query="2"
+	    ;;
+	r)
+	    query="r"
+	    ;;
+	F)
+	    query="F"
+	    ;;
+	t)
+	    query="t"
+	    ;;
 	*)
 	    echo "$flag" $OPTIND $OPTARG
 	    ;;
+	
     esac
 done
 
@@ -84,26 +70,51 @@ echo "Parsing File .. $1";
 if [ $timeLimitDays -gt 0 -o $timeLimitHours -gt 0 ] ; then
 
     # Fetch the last row of the file.
-    lastline=`tail -1 <$1`
+    lastline=$(tail -1 <$1)
 
     # Convert the date to timestamp.
     timeLimit=$(timestamp "$lastline")
 
     # Subtract the values from limit.
-    timeLimit=`expr $timeLimit - $timeLimitDays \* 24 \* 60 \* 60`
-    timeLimit=`expr $timeLimit - $timeLimitHours \* 60 \* 60`
+    timeLimit=$(expr $timeLimit - $timeLimitDays \* 24 \* 60 \* 60)
+    timeLimit=$(expr $timeLimit - $timeLimitHours \* 60 \* 60)
 
-    echo $timeLimit
-
-    #Make a new subset of rows from log (THIS TAKES TIME.)
+    # Make a new subset of rows from log (THIS TAKES TIME.)
     while read line ; do
-        rowTimeStamp=$(timestamp "$line")
-		
+        
+	rowTimeStamp=$(timestamp "$line")
+	
 	if [ $rowTimeStamp -ge $timeLimit ] ; then
-	    result+="$line\n"
+	    result="$result$line\n"
 	fi
+
     done < $1
-    
-    # Print result.
-    echo -e $result
+
+    # Remove last newline.
+    result="${result%\n}"
+
+else
+    result=$(cat $1)
 fi
+
+# Execute selected query.
+case $query in
+    c)
+        lab1_c "$count" "$result"
+	;;
+    2)
+	lab1_2 "$count" "$result"
+	;;
+    r)
+	lab1_r "$count" "$result"
+	;;
+    F)
+	lab1_F "$count" "$result"
+	;;
+    t)
+	lab1_t "$count" "$result"
+	;;
+    *)
+	echo "Invalid query. [Use c, 2, r, f, t]"
+	;;
+esac
