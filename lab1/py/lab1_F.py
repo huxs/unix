@@ -1,19 +1,23 @@
 #! /usr/bin/python
 
 import operator
+import re
 
-def lab1_r(count, data):
-    
+# What are the most common result codes that indicate failure (no auth, not found etc) and where do they come from?
+def lab1_F(count, data):
+
     codes = dict()
     for row in data:
         code = row.split()[8]
-        if code in codes:
-            codes[code] += 1
-        else:
-            codes[code] = 1
+        regexp = re.findall(r'\b(4[0-9]{2})+', code)
+        if len(regexp) > 0:
+            if code in codes:
+                codes[code] += 1
+            else:
+                codes[code] = 1
 
     sortedCodes = sorted(codes.items(), key=operator.itemgetter(1))
-    print(sortedCodes)
+
     exist = dict()
     result = []
     for row in data:

@@ -4,7 +4,7 @@
 timeLimit=0
 timeLimitHours=0
 timeLimitDays=0
-count=1
+count=999999999
 
 # Include scripts.
 dir=$(dirname "$0")
@@ -57,20 +57,34 @@ while getopts "n:h:d:c2rFt" flag ; do
 	    ;;
 	*)
 	    echo "$flag" $OPTIND $OPTARG
+	    exit 1
 	    ;;
 	
     esac
 done
 
-# Get the filename.
+# Get the infile.
 shift $(expr $OPTIND - 1)
-echo "Parsing File .. $1";
+if [ "$1" = "-" -o "$1" = "" ] ; then
+    in=/dev/stdin
+else
+    in=$1
+fi
+
+echo "Parsing File .. $in";
+
+content=$(cat $in)
+
+if [ "$?" != "0" ]; then
+    echo "Failed to read infile" 1>&2
+    exit 1
+fi
 
 # Check if we have time limit set.
 if [ $timeLimitDays -gt 0 -o $timeLimitHours -gt 0 ] ; then
 
     # Fetch the last row of the file.
-    lastline=$(tail -1 <$1)
+    lastline=$(echo "$content" | tail -1)
 
     # Convert the date to timestamp.
     timeLimit=$(timestamp "$lastline")
@@ -79,23 +93,29 @@ if [ $timeLimitDays -gt 0 -o $timeLimitHours -gt 0 ] ; then
     timeLimit=$(expr $timeLimit - $timeLimitDays \* 24 \* 60 \* 60)
     timeLimit=$(expr $timeLimit - $timeLimitHours \* 60 \* 60)
 
+    OLDIFS=$IFS
+    IFS='
+'
     # Make a new subset of rows from log (THIS TAKES TIME.)
-    while read line ; do
-        
+    for line in $content ; do
+
 	rowTimeStamp=$(timestamp "$line")
 	
 	if [ $rowTimeStamp -ge $timeLimit ] ; then
 	    result="$result$line\n"
 	fi
 
-    done < $1
+    done
 
+    IFS=$OLDIFS
+    
     # Remove last newline.
-    result="${result%\n}"
-
+    result="${result%\n}"    
 else
-    result=$(cat $1)
-fi
+    result=$content
+fi    
+    
+
 
 # Execute selected query.
 case $query in
@@ -116,5 +136,6 @@ case $query in
 	;;
     *)
 	echo "Invalid query. [Use c, 2, r, F, t]"
+	exit 1
 	;;
 esac
