@@ -25,7 +25,7 @@ lab1_r()
 		# If the code in the file matches the code in the list of codes.
 		# Append the rank of the code, the ip and the code.
 		if [ "$code" -eq "$i" ] ; then
-		    rips="$rips$c $ip $code\n" 
+		    rips="$rips$c $code $ip\n" 
 		fi
 		c=$(expr $c + 1)
 	    done
@@ -33,7 +33,7 @@ lab1_r()
 	done
 
 	# Sort the appended list and print the status code and ip.
-	echo $rips | grep . | sort -n | uniq | head -$1 | awk '{print $3, $2}'
+	echo $rips | grep . | uniq | sort -n | uniq | head -$1 | awk '{print $2, $3}'
 
 	
     }

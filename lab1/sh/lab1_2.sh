@@ -20,7 +20,7 @@ lab1_2()
 
 	done
 
-	echo "$ips" | grep . | uniq -c | sort -n -r | head -$1 | awk '{print $2, $1}'
+	echo "$ips" | grep . | sort -n | uniq -c | sort -n -r | head -$1 | awk '{print $2, $1}'
     }
 
     IFS=$OLDIFS

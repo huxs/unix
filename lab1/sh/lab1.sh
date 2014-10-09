@@ -15,7 +15,7 @@ dir=$(dirname "$0")
 . $dir/lab1_t.sh
 
 
-# Converts one row to unix timestamp
+# Converts one row to unix timestamp.
 timestamp()
 {
     time=$(echo "$1" | awk '{print $4}')
@@ -115,6 +115,6 @@ case $query in
 	lab1_t "$count" "$result"
 	;;
     *)
-	echo "Invalid query. [Use c, 2, r, f, t]"
+	echo "Invalid query. [Use c, 2, r, F, t]"
 	;;
 esac
