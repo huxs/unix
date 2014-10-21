@@ -58,19 +58,27 @@ int ex(nodeType *p) {
             ex(p->opr.op[0]);
             printf("\tnegl\t(%%esp)\n");
             break;
-        case FACT:
+        case FACT: // fact
             ex(p->opr.op[0]);
-            printf("\tfact\n");
+            printf("\tcall\tfact\t\n");
+            printf("\taddl\t$4,%%esp\n");
+            printf("\tpush\t%%eax\n");
             break;
-        case LNTWO:
+        case LNTWO: // lntwo
             ex(p->opr.op[0]);
-            printf("\lntwo\n");
+            printf("\tcall\tlntwo\t\n");
+            printf("\taddl\t$4,%%esp\n");
+            printf("\tpush\t%%eax\n");
             break;
         default:
             ex(p->opr.op[0]);
             ex(p->opr.op[1]);
             switch(p->opr.oper) {
-            case GCD:   printf("\tgcd\n"); break;
+            case GCD: // gcd
+                printf("\tcall\tgcd\t\n");
+                printf("\taddl\t$8,%%esp\n");
+                printf("\tpush\t%%eax\n");
+                break;
             case '+':
                 printf("\tmovl\t4(%%esp),%%eax\n");
                 printf("\taddl\t(%%esp),%%eax\n");
