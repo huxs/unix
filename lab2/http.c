@@ -36,7 +36,14 @@ time_t get_mtime(char *path)
     return statbuf.st_mtime;
 }
 
-static int get(char* buf, file_t* file)
+void http_getdate(time_t time, char* buffer, uint32_t size)
+{
+    struct tm* tm = localtime(&time);
+    strftime(buffer, size, "%a, %d %b %Y %H:%M:%S %Z", tm);
+}
+
+
+int get(char* buf, file_t* file)
 {
     // get filename.
     char filename[HTTP_FILENAME_LEN];
@@ -66,18 +73,11 @@ static int get(char* buf, file_t* file)
         }
     }
     close(fp);
-
-
     file->lastModified = get_mtime(filename);
     
     return HTTP_STATUS_OK;
 }
 
-static void http_getdate(time_t time, char* buffer, uint32_t size)
-{
-    struct tm* tm = localtime(&time);
-    strftime(buffer, size, "%a, %d %b %Y %H:%M:%S %Z", tm);
-}
 
 int http_serve(int socket) {
 
@@ -143,6 +143,28 @@ int http_serve(int socket) {
         result = HTTP_STATUS_NOT_IMPLEMENTED;
     }
 
+    if(result != HTTP_STATUS_OK) {
+	switch(result) {
+	case HTTP_STATUS_BAD_REQEST:
+	    sprintf(response,"HTTP/1.1 400 Bad Request\n");
+	    break;
+	case HTTP_STATUS_FORBIDDEN:	    
+	    sprintf(response,"HTTP/1.1 403 Forbidden\n");
+	    break;
+	case HTTP_STATUS_NOT_FOUND:	    
+	    sprintf(response,"HTTP/1.1 404 Not Found\n");
+	    break;
+	case HTTP_STATUS_INTERNAL_SERVER_ERROR:	    
+	    sprintf(response,"HTTP/1.1 500 Internal Server Error\n");
+	    break;
+	case HTTP_STATUS_NOT_IMPLEMENTED:
+	    sprintf(response,"HTTP/1.1 501 Not Implemented\n");
+	    break;
+	default:
+	    break;
+	}
+    }
+	
     printf("%s\n", response);
 
     // send response.
