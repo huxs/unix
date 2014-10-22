@@ -1,4 +1,6 @@
 #include "http.h"
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -20,7 +22,19 @@
 typedef struct {
     char* ptr;
     size_t size;
+    time_t lastModified;
 } file_t;
+
+
+time_t get_mtime(char *path)
+{
+    struct stat statbuf;
+    if (stat(path, &statbuf) == -1) {
+        perror(path);
+        exit(1);
+    }
+    return statbuf.st_mtime;
+}
 
 static int get(char* buf, file_t* file)
 {
@@ -52,13 +66,16 @@ static int get(char* buf, file_t* file)
         }
     }
     close(fp);
+
+
+    file->lastModified = get_mtime(filename);
+    
     return HTTP_STATUS_OK;
 }
 
-static void http_getdate(char* buffer, uint32_t size)
+static void http_getdate(time_t time, char* buffer, uint32_t size)
 {
-    time_t t = time(NULL);
-    struct tm* tm = localtime(&t);
+    struct tm* tm = localtime(&time);
     strftime(buffer, size, "%a, %d %b %Y %H:%M:%S %Z", tm);
 }
 
@@ -75,9 +92,11 @@ int http_serve(int socket) {
     //TODO log.
 
     // get current date.
-    char date[HTTP_DATE_LEN];
-    http_getdate(date, HTTP_DATE_LEN);
-
+    char cdate[HTTP_DATE_LEN];
+    char mdate[HTTP_DATE_LEN];
+    time_t ct = time(NULL);
+    http_getdate(ct, cdate, HTTP_DATE_LEN);
+    
     char response[HTTP_RESPONSE_LEN];
     memset(response, 0, HTTP_RESPONSE_LEN);
 
@@ -86,6 +105,8 @@ int http_serve(int socket) {
         file_t file;
         result = get(&msg[5], &file);
 
+	http_getdate(file.lastModified, mdate, HTTP_DATE_LEN);
+	
         if(result == HTTP_STATUS_OK) {
             sprintf(response,
                     "HTTP/1.1 %d OK\n"
@@ -95,7 +116,7 @@ int http_serve(int socket) {
                     "Content-Type: text/html\n"
                     "Content-Length: %d\n"
                     "Last-Modified: %s\n"
-                    "%s\n", result, date, file.size, date, file.ptr);
+                    "%s\n", result, cdate, file.size, mdate, file.ptr);
             free(file.ptr);
         }
 
@@ -104,6 +125,8 @@ int http_serve(int socket) {
         file_t file;
         result = get(&msg[6], &file);
 
+	http_getdate(file.lastModified, mdate, HTTP_DATE_LEN);
+	
         if(result == HTTP_STATUS_OK) {
             sprintf(response,
                     "HTTP/1.1 %d OK\n"
@@ -112,7 +135,7 @@ int http_serve(int socket) {
                     "Accept-Ranges: bytes\n"
                     "Content-Type: text/html\n"
                     "Content-Length: %d\n"
-                    "Last-Modified: %s\n", result, date, file.size, date);
+                    "Last-Modified: %s\n", result, cdate, file.size, mdate);
             free(file.ptr);
         }
 
