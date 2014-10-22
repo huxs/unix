@@ -75,35 +75,9 @@ int server_start(uint16_t port) {
                     printf("Request from %s:%i\n", inet_ntoa(pin.sin_addr), ntohs(pin.sin_port));
                 } else {
 
-                    char msg[1024];
-                    if(recv(i, msg, sizeof(msg), 0) == -1) {
-                        perror("recv");
-                        return 1;
+                    if(http_serve(i) != 0) {
+                        printf("failed to serve http request.\n");
                     }
-                    printf("%s\n", msg);
-                    http_content_t content;
-                    content = http_parse(msg);
-
-                    // calculate current date.
-                    time_t t = time(NULL);
-                    struct tm* tm = localtime(&t);
-                    char date[1024];
-
-                    strftime(date, 1024, "%a, %d %b %Y %H:%M:%S %Z", tm);
-
-                    char response[1024];
-                    memset(response, 0, 1024);
-                    // format response message.
-                    sprintf(response, "HTTP/1.1 %s\nDate: %s\nConnection: close\nAccept-Ranges: bytes\nContent-Type: text/html\nContent-Length: %d\nLast-Modified: %s\n%s", content.code, date, content.filesize, date, content.file);
-
-                    printf("%s\n", response);
-                    if(send(i, response, content.filesize + 200, 0) == -1) {
-                        perror("send");
-                        return 1;
-                    }
-
-                    if(content.code == HTTP_STATUS_OK)
-                        free(content.file);
 
                     close(i);
                     FD_CLR(i, &master);

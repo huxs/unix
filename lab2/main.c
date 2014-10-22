@@ -1,18 +1,52 @@
+#include <sys/types.h>
+#include <fcntl.h>
+#include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
+#include <getopt.h>
 #include "config.h"
 #include "server.h"
 
 int main(int argc, char** argv) {
 
-    // parse config.
+    bool daemonize = false;
+
+    // parse config file.
     if(config_parse(".lab3-config") != 0) {
         printf("failed to read config.\n");
         return 1;
-    } else {
-        printf("%s\n", config_path);
-        printf("%d\n", config_port);
     }
+
+    // parse command line.
+    int c;
+    while ((c = getopt (argc, argv, "p:dl:")) != -1)
+        switch (c) {
+        case 'p':
+            config_port = atoi(optarg);
+            break;
+        case 'd':
+            daemonize = true;
+            break;
+        case 'l':
+            //TODO: Set logfile.
+            break;
+        case '?':
+            if (optopt == 'p' || optopt == 'l')
+                fprintf(stderr, "Option %c requires an argument.\n", optopt);
+            else if (isprint (optopt))
+                fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+            else
+                fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
+            return 1;
+        default:
+            abort();
+        }
+
+    // print config values.
+    printf("%s\n", config_path);
+    printf("%d\n", config_port);
 
     // limit filesystem access for this process to the folder root.
     chdir(config_path);
@@ -23,25 +57,27 @@ int main(int argc, char** argv) {
     setgid(1000);
     setuid(1000);
 
+    // daemonize the process.
+    if(daemonize == true) {
+        umask(0);
+        pid_t pid = fork();
+        if(pid != 0)
+            exit(0);
+        setsid();
+
+        pid = fork();
+        if(pid != 0)
+            exit(0);
+
+        pid = getpid();
+        printf("PID:%ld\n", (long)pid);
+    }
+
     // start server.
     if(server_start(config_port) != 0) {
         printf("failed to start server.\n");
         return 1;
     }
-
-/*
-    // daemonize the process.
-    umask(0);
-    pid_t pid = fork();
-    if(pid != 0)
-        exit(0);
-    setsid();
-
-    if(pid != 0)
-        exit(0);
-
-    printf("PID:%d\n", pid);
-*/
 
     printf("exiting server.\n");
     return 0;

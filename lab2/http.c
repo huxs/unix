@@ -2,57 +2,130 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <time.h>
+
+#define HTTP_STATUS_OK 200
+#define HTTP_STATUS_BAD_REQEST 400
+#define HTTP_STATUS_FORBIDDEN 403
+#define HTTP_STATUS_NOT_FOUND 404
+#define HTTP_STATUS_INTERNAL_SERVER_ERROR 500
+#define HTTP_STATUS_NOT_IMPLEMENTED 501
 
 #define HTTP_FILENAME_LEN 1024
+#define HTTP_DATE_LEN 1024
+#define HTTP_MESSAGE_LEN 1024
+#define HTTP_RESPONSE_LEN 8192
 
-static http_content_t http_get(char* buf)
+typedef struct {
+    char* ptr;
+    size_t size;
+} file_t;
+
+static int get(char* buf, file_t* file)
 {
-    http_content_t content;
-
+    // get filename.
     char filename[HTTP_FILENAME_LEN];
     memset(filename, 0, HTTP_FILENAME_LEN);
-
     int i;
-    for(i = 0; buf[i] != ' '; i++) {
+    for(i = 0; buf[i] != '0'; i++) {
+        if(buf[i] == ' ') break;
         filename[i] = buf[i];
     }
 
-    printf("serving file %s\n", filename);
+    //TODO: URL validate.
 
-    FILE* file = fopen(filename, "r");
-    if(file == NULL) {
+    FILE* fp = fopen(filename, "r");
+    if(fp == NULL) {
         printf("Failed to open file.. %s\n", filename);
-        content.code = HTTP_STATUS_NOT_FOUND;
-        return content;
+        return HTTP_STATUS_NOT_FOUND;
     } else {
 
-        fseek(file, 0, SEEK_END);
-        content.filesize = ftell(file);
-        fseek(file, 0, SEEK_SET);
+        fseek(fp, 0, SEEK_END);
+        file->size = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
 
-        content.file = (char*)malloc(content.filesize);
-        if(fread(content.file, 1, content.filesize, file) == -1) {
-            printf("failed to read %d bytes from %s", content.filesize, buf);
-            content.code = HTTP_STATUS_INTERNAL_SERVER_ERROR;
-            return content;
+        file->ptr = (char*)malloc(file->size);
+        if(fread(file->ptr, 1, file->size, fp) == -1) {
+            printf("failed to read %d bytes from %s", file->size, filename);
+            return HTTP_STATUS_INTERNAL_SERVER_ERROR;
         }
     }
-    close(file);
-    content.code = HTTP_STATUS_OK;
-    printf("%s\n", content.file);
-    return content;
+    close(fp);
+    return HTTP_STATUS_OK;
 }
 
-http_content_t http_parse(char* msg)
+static void http_getdate(char* buffer, uint32_t size)
 {
-    http_content_t content;
+    time_t t = time(NULL);
+    struct tm* tm = localtime(&t);
+    strftime(buffer, size, "%a, %d %b %Y %H:%M:%S %Z", tm);
+}
 
-    //TODO: Log msg.
+int http_serve(int socket) {
 
-    if(msg[0] == 'G' && msg[1] == 'E' && msg[2] == 'T') {
-        content = http_get(&msg[5]);
-    } else {
-        content.code = HTTP_STATUS_NOT_IMPLEMENTED;
+    // recv message.
+    char msg[HTTP_MESSAGE_LEN];
+    memset(msg, 0, HTTP_MESSAGE_LEN);
+    if(recv(socket, msg, sizeof(msg), 0) == -1) {
+        perror("recv");
+        return 1;
     }
-    return content;
+
+    //TODO log.
+
+    // get current date.
+    char date[HTTP_DATE_LEN];
+    http_getdate(date, HTTP_DATE_LEN);
+
+    char response[HTTP_RESPONSE_LEN];
+    memset(response, 0, HTTP_RESPONSE_LEN);
+
+    int result;
+    if(msg[0] == 'G' && msg[1] == 'E' && msg[2] == 'T') {
+        file_t file;
+        result = get(&msg[5], &file);
+
+        if(result == HTTP_STATUS_OK) {
+            sprintf(response,
+                    "HTTP/1.1 %d OK\n"
+                    "Date: %s\n"
+                    "Connection: close\n"
+                    "Accept-Ranges: bytes\n"
+                    "Content-Type: text/html\n"
+                    "Content-Length: %d\n"
+                    "Last-Modified: %s\n"
+                    "%s\n", result, date, file.size, date, file.ptr);
+            free(file.ptr);
+        }
+
+
+    } else if(msg[0] == 'H' && msg[1] == 'E' && msg[2] == 'A' && msg[3] == 'D') {
+        file_t file;
+        result = get(&msg[6], &file);
+
+        if(result == HTTP_STATUS_OK) {
+            sprintf(response,
+                    "HTTP/1.1 %d OK\n"
+                    "Date: %s\n"
+                    "Connection: close\n"
+                    "Accept-Ranges: bytes\n"
+                    "Content-Type: text/html\n"
+                    "Content-Length: %d\n"
+                    "Last-Modified: %s\n", result, date, file.size, date);
+            free(file.ptr);
+        }
+
+    } else {
+        result = HTTP_STATUS_NOT_IMPLEMENTED;
+    }
+
+    printf("%s\n", response);
+
+    // send response.
+    if(send(socket, response, strlen(response), 0) == -1) {
+        perror("send");
+        return 1;
+    }
+    return 0;
 }
