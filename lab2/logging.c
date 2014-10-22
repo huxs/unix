@@ -1,6 +1,8 @@
 #include "logging.h"
 #include <stdlib.h>
 
+#define LOGGING_SYSLOG_MAX 1024
+
 int logging_init(char* file) {
     if(file[0] == NULL) {
 	printf("Logging to syslog.\n");
@@ -21,9 +23,13 @@ int logging_shutdown()
 
 void logging_log(int level, char* msg) {
 
-// check strings for possible overflow.
-    
-    syslog(level, msg);
+    if(loggin_mode == LOGGING_MODE_SYSLOG) {
+// check strings for possible overflow.	
+	syslog(level, msg);
+    }
+    else if(logging_mode == LOGGING_MODE_FILE) {
+
+    }
 }
 
 

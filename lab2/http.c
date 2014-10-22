@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <limits.h>
+#include "logging.h"
 
 #define HTTP_STATUS_OK 200
 #define HTTP_STATUS_BAD_REQEST 400
@@ -59,6 +60,7 @@ int get(char* buf, file_t* file)
     }
 
     printf("given %s real %s\n", filename, real);
+    printf("%d\n", strlen(filename));
     
     FILE* fp = fopen(real, "r");
     if(fp == NULL) {
@@ -93,7 +95,8 @@ int http_serve(int socket) {
         return 1;
     }
 
-    //TODO log.
+    // log request.
+    logging_log(LOG_NOTICE, "asd");
 
     // get current date.
     char cdate[HTTP_DATE_LEN];
