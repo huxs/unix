@@ -19,7 +19,7 @@ echo "\tpushl\t\$0
 \tcall\texit" >> $TMP
 
 # Debug..
-echo "$(cat "$TMP")"
+# echo "$(cat "$TMP")"
 
 as -gstabs $TMP -o "$NAME.o"
 gcc "$NAME.o" -L$DIRNAME -lc -lcalc3 -nostdlib -o "$NAME"
