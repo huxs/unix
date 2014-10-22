@@ -1,6 +1,6 @@
 CC = gcc
-OBJECTS = main.o config.o server.o http.o
-FILES = main.c config.c server.c http.c
+OBJECTS = main.o config.o server.o http.o logging.o 
+FILES = main.c config.c server.c http.c logging.c
 
 all : $(OBJECTS)
 	$(CC) -lc $^ -o main

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <time.h>
+#include <limits.h>
 
 #define HTTP_STATUS_OK 200
 #define HTTP_STATUS_BAD_REQEST 400
@@ -25,7 +26,6 @@ typedef struct {
     time_t lastModified;
 } file_t;
 
-
 time_t get_mtime(char *path)
 {
     struct stat statbuf;
@@ -42,7 +42,6 @@ void http_getdate(time_t time, char* buffer, uint32_t size)
     strftime(buffer, size, "%a, %d %b %Y %H:%M:%S %Z", tm);
 }
 
-
 int get(char* buf, file_t* file)
 {
     // get filename.
@@ -54,11 +53,16 @@ int get(char* buf, file_t* file)
         filename[i] = buf[i];
     }
 
-    //TODO: URL validate.
+    char real[HTTP_FILENAME_LEN];
+    if(realpath(filename, real) == 0) {
+	printf("failed to resolve real path name for %s\n", filename);
+    }
 
-    FILE* fp = fopen(filename, "r");
+    printf("given %s real %s\n", filename, real);
+    
+    FILE* fp = fopen(real, "r");
     if(fp == NULL) {
-        printf("Failed to open file.. %s\n", filename);
+        printf("Failed to open file.. %s\n", real);
         return HTTP_STATUS_NOT_FOUND;
     } else {
 
@@ -68,12 +72,12 @@ int get(char* buf, file_t* file)
 
         file->ptr = (char*)malloc(file->size);
         if(fread(file->ptr, 1, file->size, fp) == -1) {
-            printf("failed to read %d bytes from %s", file->size, filename);
+            printf("failed to read %d bytes from %s", file->size, real);
             return HTTP_STATUS_INTERNAL_SERVER_ERROR;
         }
     }
     close(fp);
-    file->lastModified = get_mtime(filename);
+    file->lastModified = get_mtime(real);
     
     return HTTP_STATUS_OK;
 }

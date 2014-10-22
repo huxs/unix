@@ -22,7 +22,7 @@ int server_start(uint16_t port) {
 
     struct sockaddr_in serv_addr, pin;
 
-    int sd, sd_current;
+    int sd;
 
     if((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("socket");
@@ -61,15 +61,15 @@ int server_start(uint16_t port) {
                 if(i == sd) {
 
                     socklen_t addrlen = sizeof(pin);
-                    if((sd_current = accept(sd, (struct sockaddr*)&pin, &addrlen)) == -1) {
+                    if((i = accept(sd, (struct sockaddr*)&pin, &addrlen)) == -1) {
                         perror("accept");
                         return 1;
                     }
-                    printf("accepted %d\n", sd_current);
+                    printf("accepted %d\n", i);
 
-                    FD_SET(sd_current, &master);
-                    if(sd_current > fdmax) {
-                        fdmax = sd_current;
+                    FD_SET(i, &master);
+                    if(i > fdmax) {
+                        fdmax = i;
                     }
 
                     printf("Request from %s:%i\n", inet_ntoa(pin.sin_addr), ntohs(pin.sin_port));
@@ -87,6 +87,5 @@ int server_start(uint16_t port) {
     }
 
     close(sd);
-    close(sd_current);
     return 0;
 }
