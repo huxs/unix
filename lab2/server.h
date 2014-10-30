@@ -3,6 +3,6 @@
 
 #include <stdint.h>
 
-int server_start(uint16_t port);
+int server_start(uint16_t port, char* path);
 
 #endif

@@ -6,7 +6,7 @@ all : $(OBJECTS)
 	$(CC) -lc $^ -o main
 
 $(OBJECTS) : $(FILES)
-	$(CC) -std=c99 -Wall -c $^
+	$(CC) -std=c99 -gstabs -Wall -c $^
 
 clean:
 	rm -f *.~

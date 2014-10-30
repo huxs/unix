@@ -1,6 +1,8 @@
 #include "http.h"
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/param.h>
+#include <sys/socket.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -16,19 +18,20 @@
 #define HTTP_STATUS_INTERNAL_SERVER_ERROR 500
 #define HTTP_STATUS_NOT_IMPLEMENTED 501
 
-#define HTTP_FILENAME_LEN 1024
-#define HTTP_DATE_LEN 1024
 #define HTTP_MESSAGE_LEN 1024
-#define HTTP_RESPONSE_LEN 8192
+#define HTTP_RESPONSE_LEN 1024
+#define HTTP_FILENAME_LEN 1024
+#define HTTP_CLF_LEN 1024
+#define HTTP_DATE_LEN 256
 
 typedef struct {
     char* ptr;
     size_t size;
     time_t lastModified;
+    char* type;
 } file_t;
 
-time_t get_mtime(char *path)
-{
+time_t get_mtime(char *path) {
     struct stat statbuf;
     if (stat(path, &statbuf) == -1) {
         perror(path);
@@ -37,32 +40,51 @@ time_t get_mtime(char *path)
     return statbuf.st_mtime;
 }
 
-void http_getdate(time_t time, char* buffer, uint32_t size)
-{
+void get_currentdate(time_t time, char* buffer, uint32_t size) {
     struct tm* tm = localtime(&time);
     strftime(buffer, size, "%a, %d %b %Y %H:%M:%S %Z", tm);
 }
 
+void get_currentdateCLF(time_t time, char* buffer, uint32_t size) {
+    struct tm* tm = localtime(&time);
+    strftime(buffer, size, "%d/%b/%Y:%H:%M:%S %z", tm);
+}
+
 int get(char* buf, file_t* file)
 {
-    // get filename.
-    char filename[HTTP_FILENAME_LEN];
-    memset(filename, 0, HTTP_FILENAME_LEN);
+    // dont allow request with to large filepaths.
+    if(strlen(buf) > HTTP_FILENAME_LEN)
+        return HTTP_STATUS_BAD_REQEST;
+    
+    // get filepath.
+    char filepath[HTTP_FILENAME_LEN];
+    memset(filepath, 0, HTTP_FILENAME_LEN);
     int i;
     for(i = 0; buf[i] != '0'; i++) {
         if(buf[i] == ' ') break;
-        filename[i] = buf[i];
+        filepath[i] = buf[i];
     }
 
+    // resolve path to absoulte path.
     char real[HTTP_FILENAME_LEN];
-    if(realpath(filename, real) == 0) {
-	printf("failed to resolve real path name for %s\n", filename);
+    if(realpath(filepath, real) == 0) {
+        printf("failed to resolve real path name for %s\n", filepath);
     }
 
-    printf("given %s real %s\n", filename, real);
-    printf("%d\n", strlen(filename));
-    
-    FILE* fp = fopen(real, "r");
+    // get content type.
+    char* ext = strrchr(real, '.');
+    if(ext != NULL) {
+        file->type = (char*)malloc(10);
+        if(strcmp(ext + 1, "png") == 0)
+            strcpy(file->type, "image/png");
+        else
+            strcpy(file->type, "text/html");
+    } else {
+        return HTTP_STATUS_NOT_FOUND;
+    }
+
+    // get the file content.
+    FILE* fp = fopen(real, "rb");
     if(fp == NULL) {
         printf("Failed to open file.. %s\n", real);
         return HTTP_STATUS_NOT_FOUND;
@@ -78,14 +100,18 @@ int get(char* buf, file_t* file)
             return HTTP_STATUS_INTERNAL_SERVER_ERROR;
         }
     }
-    close(fp);
+    fclose(fp);
+
+    // get the last modifed date of the file.
     file->lastModified = get_mtime(real);
     
     return HTTP_STATUS_OK;
 }
 
+int http_serve(int socket, char* ip) {
 
-int http_serve(int socket) {
+    // get current time.
+    time_t ct = time(NULL);
 
     // recv message.
     char msg[HTTP_MESSAGE_LEN];
@@ -94,56 +120,81 @@ int http_serve(int socket) {
         perror("recv");
         return 1;
     }
+    printf("%s\n", msg);
 
-    // log request.
-    logging_log(LOG_NOTICE, "asd");
-
+    // tokenize the html message.
+    char* nch = strchr(msg,'\n');
+    if(nch == NULL)
+        return 1;
+    
+    int size = nch-msg-1;
+    char* rq = (char*)malloc(size+1);
+    memcpy(rq, msg, size);
+    rq[size] = '\0';
+        
     // get current date.
     char cdate[HTTP_DATE_LEN];
-    char mdate[HTTP_DATE_LEN];
-    time_t ct = time(NULL);
-    http_getdate(ct, cdate, HTTP_DATE_LEN);
-    
-    char response[HTTP_RESPONSE_LEN];
-    memset(response, 0, HTTP_RESPONSE_LEN);
+    get_currentdate(ct, cdate, HTTP_DATE_LEN);
 
     int result;
-    if(msg[0] == 'G' && msg[1] == 'E' && msg[2] == 'T') {
+    char* response;
+    int bytesSent = 0;
+    if(rq[0] == 'G' && rq[1] == 'E' && rq[2] == 'T') {
+       
         file_t file;
-        result = get(&msg[5], &file);
+        result = get(&rq[5], &file);
 
-	http_getdate(file.lastModified, mdate, HTTP_DATE_LEN);
-	
         if(result == HTTP_STATUS_OK) {
-            sprintf(response,
-                    "HTTP/1.1 %d OK\n"
-                    "Date: %s\n"
-                    "Connection: close\n"
-                    "Accept-Ranges: bytes\n"
-                    "Content-Type: text/html\n"
-                    "Content-Length: %d\n"
-                    "Last-Modified: %s\n"
-                    "%s\n", result, cdate, file.size, mdate, file.ptr);
+
+            char mdate[HTTP_DATE_LEN];
+            get_currentdate(file.lastModified, mdate, HTTP_DATE_LEN);
+
+            response = (char*)malloc(HTTP_RESPONSE_LEN + file.size);
+            memset(response, 0, HTTP_RESPONSE_LEN + file.size);
+
+            int size = sprintf(response,
+                               "HTTP/1.1 %d OK\n"
+                               "Date: %s\n"
+                               "Connection: close\n"
+                               "Accept-Ranges: bytes\n"
+                               "Content-Type: %s\n"
+                               "Content-Length: %d\n"
+                               "Last-Modified: %s\n\n", result, cdate, file.type, file.size, mdate);
+
+            // copy file data to the end of response message.
+            memcpy(response + size, file.ptr, file.size);
+            
             free(file.ptr);
+            free(file.type);
+
+            bytesSent = file.size;
         }
-
-
-    } else if(msg[0] == 'H' && msg[1] == 'E' && msg[2] == 'A' && msg[3] == 'D') {
+        
+    } else if(rq[0] == 'H' && rq[1] == 'E' && rq[2] == 'A' && rq[3] == 'D') {
         file_t file;
-        result = get(&msg[6], &file);
-
-	http_getdate(file.lastModified, mdate, HTTP_DATE_LEN);
+        result = get(&rq[6], &file);
 	
         if(result == HTTP_STATUS_OK) {
+
+            char mdate[HTTP_DATE_LEN];
+            get_currentdate(file.lastModified, mdate, HTTP_DATE_LEN);    
+
+            response = (char*)malloc(HTTP_RESPONSE_LEN);
+            memset(response, 0, HTTP_RESPONSE_LEN);
+
             sprintf(response,
                     "HTTP/1.1 %d OK\n"
                     "Date: %s\n"
                     "Connection: close\n"
                     "Accept-Ranges: bytes\n"
-                    "Content-Type: text/html\n"
+                    "Content-Type: %s\n"
                     "Content-Length: %d\n"
-                    "Last-Modified: %s\n", result, cdate, file.size, mdate);
+                    "Last-Modified: %s\n", result, cdate, file.type, file.size, mdate);
+            
             free(file.ptr);
+            free(file.type);
+
+            bytesSent = file.size;
         }
 
     } else {
@@ -151,33 +202,46 @@ int http_serve(int socket) {
     }
 
     if(result != HTTP_STATUS_OK) {
-	switch(result) {
-	case HTTP_STATUS_BAD_REQEST:
-	    sprintf(response,"HTTP/1.1 400 Bad Request\n");
-	    break;
-	case HTTP_STATUS_FORBIDDEN:	    
-	    sprintf(response,"HTTP/1.1 403 Forbidden\n");
-	    break;
-	case HTTP_STATUS_NOT_FOUND:	    
-	    sprintf(response,"HTTP/1.1 404 Not Found\n");
-	    break;
-	case HTTP_STATUS_INTERNAL_SERVER_ERROR:	    
-	    sprintf(response,"HTTP/1.1 500 Internal Server Error\n");
-	    break;
-	case HTTP_STATUS_NOT_IMPLEMENTED:
-	    sprintf(response,"HTTP/1.1 501 Not Implemented\n");
-	    break;
-	default:
-	    break;
-	}
+        response = (char*)malloc(HTTP_RESPONSE_LEN);
+        memset(response, 0, HTTP_RESPONSE_LEN);
+        switch(result) {
+        case HTTP_STATUS_BAD_REQEST:
+            sprintf(response,"HTTP/1.1 400 Bad Request\n");
+            break;
+        case HTTP_STATUS_FORBIDDEN:	    
+            sprintf(response,"HTTP/1.1 403 Forbidden\n");
+            break;
+        case HTTP_STATUS_NOT_FOUND:	    
+            sprintf(response,"HTTP/1.1 404 Not Found\n");
+            break;
+        case HTTP_STATUS_INTERNAL_SERVER_ERROR:	    
+            sprintf(response,"HTTP/1.1 500 Internal Server Error\n");
+            break;
+        case HTTP_STATUS_NOT_IMPLEMENTED:
+            sprintf(response,"HTTP/1.1 501 Not Implemented\n");
+            break;
+        default:
+            break;
+        }
     }
 	
-    printf("%s\n", response);
+    // get the current date in clf format.
+    char cdateclf[HTTP_DATE_LEN];
+    get_currentdateCLF(ct, cdateclf, HTTP_DATE_LEN);
+
+    // log in CLF format.
+    char buf[HTTP_CLF_LEN];
+    memset(buf, 0, HTTP_CLF_LEN);
+    sprintf(buf, "%s - - [%s] \"%s\" %d %d", ip, cdateclf, rq, result, bytesSent); 
+    logging_log(LOG_INFO, buf);
+    free(rq);
 
     // send response.
-    if(send(socket, response, strlen(response), 0) == -1) {
+    if(send(socket, response, HTTP_DATE_LEN + bytesSent, 0) == -1) {
         perror("send");
         return 1;
     }
+    printf("%s\n", response);
+    free(response);
     return 0;
 }

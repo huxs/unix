@@ -1,4 +1,5 @@
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -6,6 +7,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <string.h>
 #include "config.h"
 #include "server.h"
 #include "logging.h"
@@ -33,7 +35,7 @@ int main(int argc, char** argv) {
             daemonize = true;
             break;
         case 'l':
-	    memcpy(logfile, optarg, strlen(optarg));
+            memcpy(logfile, optarg, strlen(optarg));
             break;
         case '?':
             if (optopt == 'p' || optopt == 'l')
@@ -53,16 +55,6 @@ int main(int argc, char** argv) {
 
     // initialize logging.
     logging_init(logfile);
-    logging_log(LOG_EMERG, "Test");
-
-    // limit filesystem access for this process to the folder root.
-    chdir(config_path);
-    if (chroot(config_path) != 0) {
-        perror("chroot");
-        return 1;
-    }
-    setgid(1000);
-    setuid(1000);
 
     // daemonize the process.
     if(daemonize == true) {
@@ -81,7 +73,7 @@ int main(int argc, char** argv) {
     }
 
     // start server.
-    if(server_start(config_port) != 0) {
+    if(server_start(config_port, config_path) != 0) {
         printf("failed to start server.\n");
         return 1;
     }

@@ -9,9 +9,38 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <fcntl.h>
+#include <pwd.h>
+#include <grp.h>
 #include "http.h"
 
-int server_start(uint16_t port) {
+void drop_priv(char* path)
+{
+    // limit filesystem access for this process to the folder root.
+    struct passwd *pwd;
+    struct group *grp;
+    
+    if ((pwd = getpwnam("daniel")) == 0) {
+    	fprintf(stderr, "User not found in /etc/passwd\n");
+    	exit(1);
+    }
+
+    if ((grp = getgrnam("daniel")) == 0) {
+    	fprintf(stderr, "Group not found in /etc/group\n");
+        exit(1);
+    }
+
+    chdir(path);
+    if (chroot(path) != 0) {
+        perror("chroot");
+        exit(1);
+    }
+    
+    setgid(grp->gr_gid);
+    setuid(pwd->pw_uid);
+}
+
+int server_start(uint16_t port, char* path) {
 
     fd_set master;
     fd_set read_fds;
@@ -38,6 +67,8 @@ int server_start(uint16_t port) {
         perror("bind");
         return 1;
     }
+
+    drop_priv(path);
 
     if(listen(sd, 10) == -1) {
         perror("listen");
@@ -75,7 +106,7 @@ int server_start(uint16_t port) {
                     printf("Request from %s:%i\n", inet_ntoa(pin.sin_addr), ntohs(pin.sin_port));
                 } else {
 
-                    if(http_serve(i) != 0) {
+                    if(http_serve(i, inet_ntoa(pin.sin_addr)) != 0) {
                         printf("failed to serve http request.\n");
                     }
 
