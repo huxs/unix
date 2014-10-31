@@ -139,6 +139,8 @@ int http_serve(int socket, char* ip) {
     char* header;
     if(headerS != NULL) {
 	header = headerS+1;
+	*headerS = '\0';
+	printf("URI %s\n", uri);
 	printf("Header %s\n", header);
 
 	// if there is a header copy uri to buffer.
