@@ -20,12 +20,12 @@ void drop_priv(char* path)
     struct passwd *pwd;
     struct group *grp;
     
-    if ((pwd = getpwnam("daniel")) == 0) {
+    if ((pwd = getpwnam("seclab")) == 0) {
     	fprintf(stderr, "User not found in /etc/passwd\n");
     	exit(1);
     }
 
-    if ((grp = getgrnam("daniel")) == 0) {
+    if ((grp = getgrnam("seclab")) == 0) {
     	fprintf(stderr, "Group not found in /etc/group\n");
         exit(1);
     }
@@ -83,7 +83,7 @@ int server_start(uint16_t port, char* path) {
         if(select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
             perror("select");
             return 1;
-            }
+	}
 
         int i;
         for(i = 0; i <= fdmax; i++) {

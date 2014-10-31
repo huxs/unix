@@ -50,25 +50,17 @@ void get_currentdateCLF(time_t time, char* buffer, uint32_t size) {
     strftime(buffer, size, "%d/%b/%Y:%H:%M:%S %z", tm);
 }
 
-int get(char* buf, file_t* file)
-{
+int get(char* filepath, file_t* file) {
+
     // dont allow request with to large filepaths.
-    if(strlen(buf) > HTTP_FILENAME_LEN)
+    if(strlen(filepath) > HTTP_FILENAME_LEN)
         return HTTP_STATUS_BAD_REQEST;
     
-    // get filepath.
-    char filepath[HTTP_FILENAME_LEN];
-    memset(filepath, 0, HTTP_FILENAME_LEN);
-    int i;
-    for(i = 0; buf[i] != '0'; i++) {
-        if(buf[i] == ' ') break;
-        filepath[i] = buf[i];
-    }
-
     // resolve path to absoulte path.
     char real[HTTP_FILENAME_LEN];
     if(realpath(filepath, real) == 0) {
         printf("failed to resolve real path name for %s\n", filepath);
+	return HTTP_STATUS_BAD_REQEST;
     }
 
     // get content type.
@@ -80,7 +72,7 @@ int get(char* buf, file_t* file)
         else
             strcpy(file->type, "text/html");
     } else {
-        return HTTP_STATUS_NOT_FOUND;
+        return HTTP_STATUS_BAD_REQEST;
     }
 
     // get the file content.
@@ -120,18 +112,43 @@ int http_serve(int socket, char* ip) {
         perror("recv");
         return 1;
     }
-    printf("%s\n", msg);
 
-    // tokenize the html message.
+    // get end of request line.
     char* nch = strchr(msg,'\n');
     if(nch == NULL)
         return 1;
-    
-    int size = nch-msg-1;
+
+    // get size of request line.
+    int size = nch-msg;
     char* rq = (char*)malloc(size+1);
     memcpy(rq, msg, size);
     rq[size] = '\0';
-        
+    printf("%s\n", rq);
+
+    // allocate a buffer for the uri part.
+    char uriBuffer[1024];
+    memset(uriBuffer, 0, 1024);
+
+    // find uri.
+    char* uriS = strchr(rq, ' ');
+    char* uri = uriS+1;
+    printf("Uri %s\n", uri);
+
+    // find header.
+    char* headerS = strchr(uri,' ');
+    char* header;
+    if(headerS != NULL) {
+	header = headerS+1;
+	printf("Header %s\n", header);
+
+	// if there is a header copy uri to buffer.
+	memcpy(uriBuffer, uri, headerS-uri);
+	uri = uriBuffer;
+    } else {
+	header = NULL;
+	printf("no header.\n");
+    }
+
     // get current date.
     char cdate[HTTP_DATE_LEN];
     get_currentdate(ct, cdate, HTTP_DATE_LEN);
@@ -139,40 +156,59 @@ int http_serve(int socket, char* ip) {
     int result;
     char* response;
     int bytesSent = 0;
+ 
     if(rq[0] == 'G' && rq[1] == 'E' && rq[2] == 'T') {
-       
-        file_t file;
-        result = get(&rq[5], &file);
 
-        if(result == HTTP_STATUS_OK) {
+	if(uri != NULL) {
+	    
+	    file_t file;
+	    result = get(uri, &file);
 
-            char mdate[HTTP_DATE_LEN];
-            get_currentdate(file.lastModified, mdate, HTTP_DATE_LEN);
+	    if(result == HTTP_STATUS_OK) {
 
-            response = (char*)malloc(HTTP_RESPONSE_LEN + file.size);
-            memset(response, 0, HTTP_RESPONSE_LEN + file.size);
+		response = (char*)malloc(HTTP_RESPONSE_LEN + file.size);
+		memset(response, 0, HTTP_RESPONSE_LEN + file.size);
+		
+		if(header != NULL) {
+		    char mdate[HTTP_DATE_LEN];
+		    get_currentdate(file.lastModified, mdate, HTTP_DATE_LEN);
 
-            int size = sprintf(response,
-                               "HTTP/1.1 %d OK\n"
-                               "Date: %s\n"
-                               "Connection: close\n"
-                               "Accept-Ranges: bytes\n"
-                               "Content-Type: %s\n"
-                               "Content-Length: %d\n"
-                               "Last-Modified: %s\n\n", result, cdate, file.type, file.size, mdate);
+		    int size = sprintf(response,
+			"HTTP/1.1 %d OK\n"
+			"Date: %s\n"
+			"Connection: close\n"
+			"Accept-Ranges: bytes\n"
+			"Content-Type: %s\n"
+			"Content-Length: %d\n"
+			"Last-Modified: %s\n\n", result, cdate, file.type, file.size, mdate);
 
-            // copy file data to the end of response message.
-            memcpy(response + size, file.ptr, file.size);
+		    if(send(socket, response, size, 0) == -1) {
+			perror("send");
+			return 1;
+		    }
+		    /*
+		      if(recv(socket, msg, sizeof(msg), 0) == -1) {
+		      perror("recv");
+		      return 1;
+		      }*/
+		}
+
+		memset(response, 0, HTTP_RESPONSE_LEN);
+		memcpy(response, file.ptr, file.size);
             
-            free(file.ptr);
-            free(file.type);
+		free(file.ptr);
+		free(file.type);
 
-            bytesSent = file.size;
+		bytesSent = file.size;
+	    }
+	    else {
+		result = HTTP_STATUS_BAD_REQEST;
+	    }
         }
         
     } else if(rq[0] == 'H' && rq[1] == 'E' && rq[2] == 'A' && rq[3] == 'D') {
         file_t file;
-        result = get(&rq[6], &file);
+        result = get(uri, &file);
 	
         if(result == HTTP_STATUS_OK) {
 

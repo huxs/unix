@@ -10,7 +10,7 @@ FILE* file;
 int logging_init(char* filename) {
     if(filename[0] == '\0') {
         printf("Logging to syslog.\n");
-         openlog("webs", LOG_CONS, LOG_DAEMON);
+	openlog("webs", LOG_CONS, LOG_DAEMON);
         logging_mode = LOGGING_MODE_SYSLOG;
     } else {
         printf("Logging to %s\n", filename);

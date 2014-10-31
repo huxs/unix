@@ -55,7 +55,8 @@ int main(int argc, char** argv) {
 
     // initialize logging.
     logging_init(logfile);
-
+    logging_log(LOG_INFO, "Starting server..");
+    
     // daemonize the process.
     if(daemonize == true) {
         umask(0);
